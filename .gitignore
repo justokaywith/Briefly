@@ -1,0 +1,14 @@
+build/
+runtime/
+.local/
+*.exe
+*.dll
+*.bin
+*.wav
+*.mp3
+*.pending.json
+*.synced.json
+*.dat
+*.pfx
+*.key
+*.zip
