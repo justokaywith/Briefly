@@ -1,0 +1,13 @@
+using System;using System.IO;using System.Drawing;using System.Reflection;using System.Windows.Forms;using Briefly;
+class ListenPresentationTest {
+ [STAThread]static int Main(){Application.EnableVisualStyles();var flags=BindingFlags.Instance|BindingFlags.NonPublic;string dir=Path.GetFullPath("outputs/briefly/work/live-listen-20261102");Directory.CreateDirectory(dir);
+  using(var form=new MainForm(false)){
+   typeof(MainForm).GetField("currentUser",flags).SetValue(form,new System.Collections.Generic.Dictionary<string,object>{{"id","fixture"},{"email","sample@example.test"},{"username","sample"},{"firstName","Alex"}});
+   form.Show();typeof(MainForm).GetMethod("OnAuthSuccess",flags).Invoke(form,null);typeof(MainForm).GetMethod("SwitchTab",flags).Invoke(form,new object[]{"settings"});Application.DoEvents();
+   foreach(var size in new[]{new Size(800,600),new Size(1440,900)}){form.ClientSize=size;Application.DoEvents();using(var bitmap=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));bitmap.Save(Path.Combine(dir,"settings-"+size.Width+".png"));}}
+   bool inspected=false;using(var timer=new Timer{Interval=100}){timer.Tick+=(s,e)=>{foreach(Form dialog in Application.OpenForms){if(dialog==form)continue;int buttons=0;bool start=false,ignore=false,never=false;Inspect(dialog,ref buttons,ref start,ref ignore,ref never);if(!start||!ignore||!never||dialog.CancelButton==null)throw new Exception("Explicit safe prompt actions missing");using(var b=new Bitmap(dialog.Width,dialog.Height)){dialog.DrawToBitmap(b,new Rectangle(Point.Empty,b.Size));b.Save(Path.Combine(dir,"detected-prompt.png"));}inspected=true;timer.Stop();dialog.Close();break;}};timer.Start();var choice=typeof(MainForm).GetMethod("ShowDetectedMeetingPrompt",flags).Invoke(form,new object[]{new MeetingSignal{Source="microphone",AppKey="fixture-app",Platform="Unknown",Title="Fictional microphone activity"}});if((string)choice!="ignore"||!inspected)throw new Exception("Closing prompt must ignore, never record");}
+   if((bool)typeof(MainForm).GetField("isRecording",flags).GetValue(form))throw new Exception("Prompt recorded without Start");form.Close();
+  }Console.WriteLine("Native settings layouts rendered at800/1440; Start/Ignore/Don't-ask prompt inspected; default close does not record. Fictional account only.");return 0;
+ }
+ static void Inspect(Control parent,ref int count,ref bool start,ref bool ignore,ref bool never){foreach(Control c in parent.Controls){if(c is Button){count++;start|=c.Text=="Start";ignore|=c.Text=="Ignore";never|=c.Text=="Don't ask for this app";}Inspect(c,ref count,ref start,ref ignore,ref never);}}
+}

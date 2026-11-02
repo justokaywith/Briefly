@@ -15,6 +15,7 @@ class LiveListenTest {
   Equal(state.Update(false,true,false),"none");clock=clock.AddSeconds(60);Equal(state.Update(false,true,true),"none");
   if(MeetingSignals.LooksLikeCall("ms-teams","Chat | Microsoft Teams"))throw new Exception("Chat incorrectly treated as meeting");
   if(!MeetingSignals.LooksLikeCall("chrome","Meet - abc-defg-hij"))throw new Exception("Meet title not recognized");
+  var apps=new LiveListenState(()=>clock);Equal(apps.Update(true,false,true,"chrome"),"none");Equal(apps.Update(true,false,true,"chrome"),"confirm-start");Equal(apps.Update(true,false,true,"chrome"),"none");Equal(apps.Update(true,false,true,"teams"),"none");Equal(apps.Update(true,false,true,"teams"),"confirm-start");
   Console.WriteLine("Live Listen debounce, manual-stop suppression, stop confirmation and call-title checks passed.");return 0;
  }catch(Exception e){Console.Error.WriteLine(e.Message);return 1;}}
 }

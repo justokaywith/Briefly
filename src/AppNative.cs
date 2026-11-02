@@ -93,6 +93,11 @@ namespace Briefly
         private int detectorBusy;
         private bool detectorPromptOpen,recordingFromDetection;
         private volatile bool liveListenEnabled;
+        private bool restoringListen;
+        private int detectorGeneration;
+        private ListenPreferences listenPreferences=new ListenPreferences();
+        private volatile HashSet<string> ignoredAppKeys=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private string lastDetectionLog;
         private MeetingSignal latestMeetingSignal=new MeetingSignal();
         private string capturedMeetingTitle,capturedPlatform,capturedSignalKey;
         private DateTime capturedStartedAt;
@@ -191,8 +196,13 @@ namespace Briefly
             timerWave.Tick += TimerWave_Tick;
 
             timerDetector = new System.Windows.Forms.Timer { Interval = 3000 };
-            timerDetector.Tick += (s, e) => { if (isAuthenticated) ThreadPool.QueueUserWorkItem(state => CheckRunningMeetings()); };
+            timerDetector.Tick += (s, e) => { if (isAuthenticated&&liveListenEnabled) ThreadPool.QueueUserWorkItem(state => CheckRunningMeetings()); };
             if(!enableServices){ShowAuthView();return;}
+            listenPreferences=ListenPreferences.LoadFrom(ListenPreferences.Store);
+            ignoredAppKeys=new HashSet<string>(listenPreferences.IgnoredApps,StringComparer.OrdinalIgnoreCase);
+            restoringListen=true;liveListen.Checked=listenPreferences.Enabled;liveListenEnabled=listenPreferences.Enabled;restoringListen=false;
+            DesktopDiagnostics.Detection=liveListenEnabled?"Waiting for sign-in / next poll":"Off";
+            DesktopDiagnostics.Record("startup","local",liveListenEnabled?"listen-restored-on":"listen-restored-off");
             timerDetector.Start();
 
             // Startup state
@@ -737,7 +747,12 @@ namespace Briefly
             pnlViewRecord.Controls.Add(pnlLeft);
             liveListen=new ListenSwitch { Text="Live Listen — ask me when a meeting is detected",Dock=DockStyle.Top,Height=44,Padding=new Padding(24,0,0,0),BackColor=clrSurface,ForeColor=clrInk,AutoCheck=true,Checked=false };
             liveListen.AccessibleDescription="Optional supported-call detection. Recording begins only after confirmation. System capture includes all sound on the selected output device.";
-            liveListen.CheckedChanged+=(sender,args)=>{listenState.Update(false,isRecording,false);if(liveListen.Checked&&MessageBox.Show("Enable meeting detection while Briefly is running? You will be asked before any recording starts. Detection checks call-window and audio-device activity; it does not transcribe audio in the background, and may not recognize every meeting app.","Live Listen",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)liveListen.Checked=false;liveListenEnabled=liveListen.Checked;latestMeetingSignal=new MeetingSignal();};
+            liveListen.CheckedChanged+=(sender,args)=>{
+                if(restoringListen)return;
+                if(liveListen.Checked&&MessageBox.Show("Enable detection while Briefly is running, including when minimized? Briefly checks other apps' microphone-use metadata and supported call controls. It does not listen to or record audio until you choose Start. Microphone use can be something other than a meeting, and some calls may be missed.","Live Listen",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){restoringListen=true;liveListen.Checked=false;restoringListen=false;}
+                detectorGeneration++;listenState.Update(false,isRecording,false);liveListenEnabled=liveListen.Checked;latestMeetingSignal=new MeetingSignal();listenPreferences.Enabled=liveListenEnabled;
+                SaveListenPreferences();DesktopDiagnostics.Detection=liveListenEnabled?"Waiting for next poll":"Off";DesktopDiagnostics.Record("detection","preferences",liveListenEnabled?"enabled":"disabled");
+            };
             pnlViewRecord.Controls.Add(liveListen);
             liveListen.BringToFront();
         }
@@ -908,16 +923,18 @@ namespace Briefly
                     DesktopSpeech.VerifyInstalled(AppDomain.CurrentDomain.BaseDirectory);
                     audioCapture=new CaptureSession();audioCapture.Start(recordingsDir);
                 } catch(Exception error) {
+                    DesktopDiagnostics.Capture="Could not start";DesktopDiagnostics.LastError="Capture could not start; check microphone/output and installed speech engine";DesktopDiagnostics.Record("capture","wasapi","start-failed");
                     if(audioCapture!=null){audioCapture.Dispose();audioCapture=null;}
                     lblStatus.Text=error.Message;lblStatus.ForeColor=clrRed;return;
                 }
                 isRecording = true;
                 recordingStartTime = DateTime.UtcNow;
                 capturedStartedAt=recordingStartTime;
-                capturedMeetingTitle=latestMeetingSignal.Title;
+                capturedMeetingTitle=latestMeetingSignal.ObservedTitle;
                 capturedPlatform=latestMeetingSignal.Platform;
                 capturedSignalKey=latestMeetingSignal.Key;
                 listenState.RecordingStarted(recordingFromDetection);
+                DesktopDiagnostics.Capture="Recording";DesktopDiagnostics.Record("capture","wasapi","started");
                 btnRecord.Text = "Stop & save";
                 btnRecord.BackColor = clrRed;
                 btnRecord.ForeColor = Color.White;
@@ -939,6 +956,7 @@ namespace Briefly
                 btnRecord.Enabled = false;
                 btnRecord.Text = "Saving audio...";
                 lblStatus.Text = "Stopping capture and saving your audio. Please wait...";
+                DesktopDiagnostics.Capture="Saving audio";DesktopDiagnostics.Record("capture","wasapi","stop-requested");
 
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
@@ -972,8 +990,10 @@ namespace Briefly
                 audioCapture.Stop(wavPath,mp3Path);
                 double capturedSeconds=audioCapture.ElapsedSeconds;
                 audioCapture.Dispose();audioCapture=null;
+                DesktopDiagnostics.Capture="Transcribing locally";DesktopDiagnostics.Record("transcription","whisper","started");
                 this.BeginInvoke(new Action(()=>{btnRecord.Text="Transcribing...";lblStatus.Text="Audio saved. Transcribing on this computer...";}));
                 string transcript=DesktopSpeech.Transcribe(AppDomain.CurrentDomain.BaseDirectory,wavPath);
+                DesktopDiagnostics.Record("transcription","whisper","completed");
                 string title=string.IsNullOrWhiteSpace(capturedMeetingTitle)?"":capturedMeetingTitle;
                 var payload=new Dictionary<string,object>{{"requestId","recording_"+Guid.NewGuid().ToString("N")},{"windowTitle",title},{"transcript",transcript},{"durationSeconds",capturedSeconds},{"source","windows_desktop"},{"platform",capturedPlatform??"Unknown"},{"recordedAt",new DateTimeOffset(capturedStartedAt).ToUnixTimeMilliseconds()}};
                 JavaScriptSerializer json=new JavaScriptSerializer();json.MaxJsonLength=8*1024*1024;
@@ -981,6 +1001,7 @@ namespace Briefly
                 string owner=currentUser!=null&&currentUser.ContainsKey("id")?Convert.ToString(currentUser["id"]):null;
                 PendingUpload.Save(pending,owner,json.Serialize(payload));
                 this.BeginInvoke(new Action(()=>{btnRecord.Text="Syncing notes...";lblStatus.Text="Transcript ready. Syncing your meeting...";}));
+                DesktopDiagnostics.Capture="Syncing notes";DesktopDiagnostics.Record("sync","portal","started");
                 bool synced=false;string syncMessage="Saved locally. Upload will need to be retried.";
                 try {
                     if(!isAuthenticated||string.IsNullOrEmpty(pairToken))throw new IOException("Sign in to sync.");
@@ -995,7 +1016,8 @@ namespace Briefly
                     }
                     if(!synced)throw new IOException("The server did not confirm the meeting.");
                     File.Move(pending,pending.Replace(".pending.json",".synced.json"));syncMessage="Transcript synced. Open the web portal for meeting notes.";
-                } catch { }
+                } catch { DesktopDiagnostics.LastError="Sync not confirmed; recording and pending transcript kept"; }
+                DesktopDiagnostics.Capture=synced?"Idle - synced":"Idle - sync pending";DesktopDiagnostics.Record("sync","portal",synced?"confirmed":"pending");
                 this.BeginInvoke(new Action(()=>{
                     ResetRecordButton();
                     lblStatus.Text=syncMessage;lblStatus.ForeColor=synced?clrGreen:clrRed;lblTimer.Text="00:00:00";
@@ -1003,6 +1025,7 @@ namespace Briefly
                     if(synced)ThreadPool.QueueUserWorkItem(_=>FetchCloudMeetings());
                 }));
             } catch(Exception error) {
+                DesktopDiagnostics.Capture="Failed - local files preserved";DesktopDiagnostics.LastError="Capture or transcription failed; review app status";DesktopDiagnostics.Record("processing","local","failed");
                 if(audioCapture!=null){audioCapture.Dispose();audioCapture=null;}
                 this.BeginInvoke(new Action(()=>{ResetRecordButton();lblStatus.Text=error.Message;lblStatus.ForeColor=clrRed;}));
             }
@@ -1303,31 +1326,67 @@ namespace Briefly
             btnRecord.BackColor=Amber;btnRecord.ForeColor=Ink;btnRecord.Enabled=true;btnRecord.Text="Record meeting";
             if(referenceCaptureTitle!=null)referenceCaptureTitle.Text="Ready to capture";
         }
+        private void SaveListenPreferences(){
+            try{listenPreferences.SaveTo(ListenPreferences.Store);}
+            catch{DesktopDiagnostics.LastError="Live Listen preferences could not be saved";DesktopDiagnostics.Record("preferences","local","save-failed");lblStatus.Text="Your Live Listen change is active for this session, but could not be saved.";}
+        }
+        private string ShowDetectedMeetingPrompt(MeetingSignal signal){
+            string result="ignore";
+            using(var dialog=new Form{Text="Possible meeting detected",ClientSize=new Size(600,254),MinimumSize=new Size(480,254),StartPosition=FormStartPosition.CenterParent,BackColor=Paper,ForeColor=Ink,Font=new Font("Segoe UI",10),MinimizeBox=false,MaximizeBox=false,FormBorderStyle=FormBorderStyle.FixedDialog}){
+                var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24),ColumnCount=1,RowCount=3};layout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,52));dialog.Controls.Add(layout);
+                layout.Controls.Add(RefLabel("Start recording this meeting?",18,true),0,0);
+                var message=RefLabel(signal.Source=="microphone"?"Another app is using your microphone. This may be a meeting or another voice feature.":"Supported active-call controls were found.",10);
+                message.Text+="\nRecording captures your mic and system sound. Inform participants first.";layout.Controls.Add(message,0,1);
+                var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};layout.Controls.Add(actions,0,2);
+                var start=RefButton("Start",()=>{result="start";dialog.Close();},true);start.Width=110;
+                var ignore=RefButton("Ignore",()=>dialog.Close());ignore.Width=110;
+                var never=RefButton("Don't ask for this app",()=>{result="ignore-app";dialog.Close();});never.Width=240;
+                actions.Controls.AddRange(new Control[]{start,ignore,never});dialog.CancelButton=ignore;dialog.Shown+=(s,e)=>ignore.Focus();dialog.ShowDialog(this);
+            }
+            return result;
+        }
+        private void ShowDiagnostics(){
+            using(var dialog=new Form{Text="Briefly diagnostics",ClientSize=new Size(650,470),MinimumSize=new Size(480,360),StartPosition=FormStartPosition.CenterParent,BackColor=Paper,Font=new Font("Segoe UI",10)}){
+                var box=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,BackColor=Paper,ForeColor=Ink,Text=DesktopDiagnostics.Snapshot()};dialog.Controls.Add(box);
+                using(var refresh=new System.Windows.Forms.Timer{Interval=1000}){refresh.Tick+=(s,e)=>{string value=DesktopDiagnostics.Snapshot();if(value!=box.Text)box.Text=value;};refresh.Start();dialog.ShowDialog(this);}
+            }
+        }
+        private void ResetIgnoredApps(){
+            if(MessageBox.Show(this,"Allow Live Listen to ask about previously ignored apps again? Recording will still need your confirmation.","Reset ignored apps",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            listenPreferences.IgnoredApps.Clear();ignoredAppKeys=new HashSet<string>(StringComparer.OrdinalIgnoreCase);SaveListenPreferences();listenState.Update(false,isRecording,false);DesktopDiagnostics.Record("preferences","local","ignored-apps-reset");
+        }
         private void CheckRunningMeetings()
         {
             // Live Listen is opt-in; do not inspect other app windows when it is off.
             if(!liveListenEnabled)return;
             if(Interlocked.Exchange(ref detectorBusy,1)!=0)return;
+            int generation=detectorGeneration;
             MeetingSignal signal;
-            try { signal=MeetingSignals.DetectDetailed(); }
-            catch { signal=new MeetingSignal{Reliable=false}; }
+            try { var ignored=ignoredAppKeys;signal=MeetingSignals.DetectDetailed(app=>ignored.Contains(app)); }
+            catch { signal=new MeetingSignal{Reliable=false,Source="unavailable"}; }
             if(!IsHandleCreated||IsDisposed){Interlocked.Exchange(ref detectorBusy,0);return;}
             try{BeginInvoke(new Action(()=>{
               try{
-                if(!isAuthenticated||!liveListenEnabled||detectorPromptOpen)return;
+                if(!isAuthenticated||!liveListenEnabled||detectorPromptOpen||generation!=detectorGeneration)return;
                 latestMeetingSignal=signal;
                 isMeetingDetected=!string.IsNullOrEmpty(signal.Title);
                 activeMeetingTitle=signal.Title??"No active call detected";
-                lblRadarText.Text=isMeetingDetected?signal.Platform+" call detected\n"+signal.Title:signal.Reliable?"Ready\nStart recording manually or turn on Live Listen.":"Call detection unavailable for this window. Record manually.";
+                DesktopDiagnostics.Detection=isMeetingDetected?(signal.Source=="microphone"?"Other-app microphone activity":"Supported call controls"):signal.Reliable?"No active signal":"Evidence unavailable / incomplete";
+                DesktopDiagnostics.Microphone=signal.Source=="microphone"?"Other app active (metadata only)":signal.Source=="call-controls"?"No confirmed other-app mic signal; call controls found":signal.Reliable?"No active other-app use observed":"Unknown";
+                string detectionCode=signal.Source+"-"+(isMeetingDetected?"active":signal.Reliable?"idle":"unknown");
+                if(detectionCode!=lastDetectionLog){lastDetectionLog=detectionCode;DesktopDiagnostics.Record("detection",signal.Source,isMeetingDetected?"active":signal.Reliable?"idle":"unknown");}
+                lblRadarText.Text=isMeetingDetected?(signal.Source=="microphone"?"Microphone activity detected":"Call controls detected")+"\n"+signal.Title:signal.Reliable?"Live Listen on\nWaiting for microphone or call activity.":"Detection evidence unavailable. Record manually.";
                 lblRadarText.ForeColor=isMeetingDetected?Color.FromArgb(150,220,190):Color.FromArgb(185,201,199);
                 if(!signal.Reliable){listenState.DetectionUnavailable();return;}
                 bool sameCall=isMeetingDetected&&(!isRecording||capturedSignalKey==signal.Key);
-                string action=listenState.Update(sameCall,isRecording,liveListen!=null&&liveListen.Checked);
+                string action=listenState.Update(sameCall,isRecording,liveListen!=null&&liveListen.Checked,signal.Key);
                 if(action=="confirm-start"&&btnRecord.Enabled){
                     detectorPromptOpen=true;
                     try{
-                        var answer=MessageBox.Show("A "+signal.Platform+" call is active. Record this meeting? This captures microphone and system audio. Only record with participants' permission.","Meeting detected",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2);
-                        if(answer==DialogResult.Yes&&isAuthenticated&&liveListen.Checked&&!isRecording&&btnRecord.Enabled){
+                        string answer=ShowDetectedMeetingPrompt(signal);
+                        DesktopDiagnostics.Record("prompt","local",answer);
+                        if(answer=="ignore-app"&&signal.AppKey!=null){listenPreferences.Ignore(signal.AppKey);ignoredAppKeys=new HashSet<string>(listenPreferences.IgnoredApps,StringComparer.OrdinalIgnoreCase);SaveListenPreferences();}
+                        if(answer=="start"&&isAuthenticated&&liveListen.Checked&&!isRecording&&btnRecord.Enabled){
                             recordingFromDetection=true;
                             try{BtnRecord_Click(btnRecord,EventArgs.Empty);}finally{recordingFromDetection=false;}
                         }
