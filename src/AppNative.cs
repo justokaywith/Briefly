@@ -78,7 +78,7 @@ namespace Briefly
         private Color clrRed = Color.FromArgb(239, 68, 68);
 
         // State
-        private string appVersion = "1.3.4";
+        private string appVersion = "1.3.5";
         private string apiOrigin = "https://briefly.pactuno.online";
         private string pairToken = null;
         private Dictionary<string, object> currentUser = null;
@@ -281,7 +281,7 @@ namespace Briefly
             btnUpdateLink.Size = new Size(160, 24);
             btnUpdateLink.Location = new Point(860, 6);
             btnUpdateLink.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnUpdateLink.Click += (s, e) => { Process.Start(apiOrigin + "/downloads/Briefly-Setup.exe"); };
+            btnUpdateLink.Click += (s, e) => { Process.Start(new ProcessStartInfo("https://briefly.pactuno.online/#download"){UseShellExecute=true}); };
 
             pnlUpdateBanner.Controls.Add(lblUpdateBadge);
             pnlUpdateBanner.Controls.Add(lblUpdateMsg);
@@ -1250,7 +1250,7 @@ namespace Briefly
                         {
                             this.BeginInvoke(new Action(() =>
                             {
-                                lblUpdateMsg.Text = string.Format("A new version (v{0}) is live on pactuno.online. Your version is v{1}.", remoteVer, appVersion);
+                                lblUpdateMsg.Text = "New version v"+remoteVer+" available. Click Download update.";
                                 pnlUpdateBanner.Visible = true;
                             }));
                             return;

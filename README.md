@@ -4,7 +4,7 @@ Meeting audio capture and notes, connected to your Pactuno account.
 
 ## Windows preview
 
-[Download version 1.3.4](https://github.com/justokaywith/Briefly/releases/download/v1.3.4/Briefly-Setup-1.3.4.exe)
+[Download version 1.3.5](https://github.com/justokaywith/Briefly/releases/download/v1.3.5/Briefly-Setup-1.3.5.exe)
 
 - Native Windows interface and browser-based Pactuno sign-in; no manual pairing token.
 - Local microphone/system audio capture and local speech models.
@@ -22,4 +22,4 @@ Include Windows version, app version and reproducible steps. Do not post meeting
 
 ## Repository scope
 
-Native Windows client and installer source, release downloads, setup guidance and issue tracking. Hosted identity/service infrastructure and customer content remain private. See [1.3.4 verification and build notes](docs/1.3.4-preview.md). Included third-party components have notices in the installed application.
+Native Windows client and installer source, release downloads, setup guidance and issue tracking. Hosted identity/service infrastructure and customer content remain private. See [1.3.5 verification and build notes](docs/1.3.5-preview.md). Included third-party components have notices in the installed application.
