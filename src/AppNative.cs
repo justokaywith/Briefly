@@ -78,7 +78,7 @@ namespace Briefly
         private Color clrRed = Color.FromArgb(239, 68, 68);
 
         // State
-        private string appVersion = "1.3.5";
+        private string appVersion = "1.3.7";
         private string apiOrigin = "https://briefly.pactuno.online";
         private string pairToken = null;
         private Dictionary<string, object> currentUser = null;
@@ -529,7 +529,7 @@ namespace Briefly
         {
             if(isRecording||syncRetryBusy!=0||(isAuthenticated&&btnRecord!=null&&!btnRecord.Enabled)){
                 e.Cancel=true;
-                MessageBox.Show("Stop recording and wait for processing to finish before closing Briefly. Your audio stays on this device.","Recording in progress",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                BrieflyDialogs.Show("Stop recording and wait for processing to finish before closing Briefly. Your audio stays on this device.","Recording in progress",MessageBoxButtons.OK,MessageBoxIcon.Information);
             }else{
                 if(authCancellation!=null)authCancellation.Cancel();
                 timerDetector.Stop();
@@ -591,8 +591,8 @@ namespace Briefly
 
         private void ExecuteSignOut()
         {
-            if(isRecording||syncRetryBusy!=0||(btnRecord!=null&&!btnRecord.Enabled)){MessageBox.Show("Stop recording and wait for processing or sync before signing out.","Briefly");return;}
-            DialogResult dr = MessageBox.Show("Are you sure you want to sign out of Briefly?", "Sign Out", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if(isRecording||syncRetryBusy!=0||(btnRecord!=null&&!btnRecord.Enabled)){BrieflyDialogs.Show("Stop recording and wait for processing or sync before signing out.","Briefly");return;}
+            DialogResult dr = BrieflyDialogs.Show("Are you sure you want to sign out of Briefly?", "Sign Out", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (dr == DialogResult.Yes)
             {
                 ClearConfig();
@@ -749,7 +749,7 @@ namespace Briefly
             liveListen.AccessibleDescription="Optional supported-call detection. Recording begins only after confirmation. System capture includes all sound on the selected output device.";
             liveListen.CheckedChanged+=(sender,args)=>{
                 if(restoringListen)return;
-                if(liveListen.Checked&&MessageBox.Show("Enable detection while Briefly is running, including when minimized? Briefly checks other apps' microphone-use metadata and supported call controls. It does not listen to or record audio until you choose Start. Microphone use can be something other than a meeting, and some calls may be missed.","Live Listen",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){restoringListen=true;liveListen.Checked=false;restoringListen=false;}
+                if(liveListen.Checked&&BrieflyDialogs.Show("Enable detection while Briefly is running, including when minimized? Briefly checks other apps' microphone-use metadata and supported call controls. It does not listen to or record audio until you choose Start. Microphone use can be something other than a meeting, and some calls may be missed.","Live Listen",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes){restoringListen=true;liveListen.Checked=false;restoringListen=false;}
                 detectorGeneration++;listenState.Update(false,isRecording,false);liveListenEnabled=liveListen.Checked;latestMeetingSignal=new MeetingSignal();listenPreferences.Enabled=liveListenEnabled;
                 SaveListenPreferences();DesktopDiagnostics.Detection=liveListenEnabled?"Waiting for next poll":"Off";DesktopDiagnostics.Record("detection","preferences",liveListenEnabled?"enabled":"disabled");
             };
@@ -866,7 +866,7 @@ namespace Briefly
             pnlCard.Controls.Add(lblVersionInfo);
             pnlCard.Controls.Add(btnCheckUpdate);
             var speechSettings=new RoundedButton{Text="Speech recognition settings",Location=new Point(26,355),Size=new Size(270,42),BackColor=Color.FromArgb(15,42,46),ForeColor=Color.White};
-            speechSettings.Click+=(sender,args)=>{if(isRecording){MessageBox.Show("Finish recording before changing recognition settings.","Briefly");return;}SpeechPreferences.ShowDialog(this);};
+            speechSettings.Click+=(sender,args)=>{if(isRecording){BrieflyDialogs.Show("Finish recording before changing recognition settings.","Briefly");return;}SpeechPreferences.ShowDialog(this);};
             pnlCard.Controls.Add(speechSettings);
 
             pnlViewSettings.Controls.Add(pnlCard);
@@ -1045,7 +1045,7 @@ namespace Briefly
 
         private void RetrySavedMeetings(Button button)
         {
-            if(!isAuthenticated||currentUser==null||!currentUser.ContainsKey("id")){MessageBox.Show("Sign in before retrying saved meetings.","Briefly");return;}
+            if(!isAuthenticated||currentUser==null||!currentUser.ContainsKey("id")){BrieflyDialogs.Show("Sign in before retrying saved meetings.","Briefly");return;}
             if(isRecording||!btnRecord.Enabled||Interlocked.CompareExchange(ref syncRetryBusy,1,0)!=0)return;
             string owner=Convert.ToString(currentUser["id"]);button.Enabled=false;
             ThreadPool.QueueUserWorkItem(state=>{
@@ -1158,7 +1158,7 @@ namespace Briefly
 
                         this.BeginInvoke(new Action(() =>
                         {
-                            if (notifyUser) MessageBox.Show("Retrieved " + cloudMeetingList.Count + " meetings from Cloudflare D1.", "Briefly Cloud Sync", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            if (notifyUser) BrieflyDialogs.Show("Retrieved " + cloudMeetingList.Count + " meetings from Cloudflare D1.", "Briefly Cloud Sync", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }));
                     }
                 }
@@ -1169,7 +1169,7 @@ namespace Briefly
                 {
                     this.BeginInvoke(new Action(() =>
                     {
-                        MessageBox.Show("Cloud sync error: " + ex.Message, "Briefly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        BrieflyDialogs.Show("Cloud sync error: " + ex.Message, "Briefly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }));
                 }
             }
@@ -1285,7 +1285,7 @@ namespace Briefly
                 {
                     this.BeginInvoke(new Action(() =>
                     {
-                        MessageBox.Show("You are running the latest version of Briefly (v" + appVersion + ").", "Briefly Update Check", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        BrieflyDialogs.Show("You are running the latest version of Briefly (v" + appVersion + ").", "Briefly Update Check", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }));
                 }
             }
@@ -1295,7 +1295,7 @@ namespace Briefly
                 {
                     this.BeginInvoke(new Action(() =>
                     {
-                        MessageBox.Show("Could not check for updates: " + ex.Message, "Briefly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        BrieflyDialogs.Show("Could not check for updates: " + ex.Message, "Briefly", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }));
                 }
             }
@@ -1332,27 +1332,24 @@ namespace Briefly
         }
         private string ShowDetectedMeetingPrompt(MeetingSignal signal){
             string result="ignore";
-            using(var dialog=new Form{Text="Possible meeting detected",ClientSize=new Size(600,254),MinimumSize=new Size(480,254),StartPosition=FormStartPosition.CenterParent,BackColor=Paper,ForeColor=Ink,Font=new Font("Segoe UI",10),MinimizeBox=false,MaximizeBox=false,FormBorderStyle=FormBorderStyle.FixedDialog}){
-                var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24),ColumnCount=1,RowCount=3};layout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,52));dialog.Controls.Add(layout);
-                layout.Controls.Add(RefLabel("Start recording this meeting?",18,true),0,0);
-                var message=RefLabel(signal.Source=="microphone"?"Another app is using your microphone. This may be a meeting or another voice feature.":"Supported active-call controls were found.",10);
-                message.Text+="\nRecording captures your mic and system sound. Inform participants first.";layout.Controls.Add(message,0,1);
-                var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};layout.Controls.Add(actions,0,2);
-                var start=RefButton("Start",()=>{result="start";dialog.Close();},true);start.Width=110;
-                var ignore=RefButton("Ignore",()=>dialog.Close());ignore.Width=110;
-                var never=RefButton("Don't ask for this app",()=>{result="ignore-app";dialog.Close();});never.Width=240;
-                actions.Controls.AddRange(new Control[]{start,ignore,never});dialog.CancelButton=ignore;dialog.Shown+=(s,e)=>ignore.Focus();dialog.ShowDialog(this);
+            using(var dialog=new DialogSurface("Start recording this meeting?",new Size(600,380))){
+                string message=signal.Source=="microphone"?"Another app is using your microphone. This may be a meeting or another voice feature.":"Supported active-call controls were found.";
+                dialog.SetMessage(message+"\n\nRecording captures your microphone and system sound. Inform participants before you start.");
+                dialog.AddAction("Start",()=>{result="start";dialog.Close();});
+                var ignore=dialog.AddAction("Ignore",()=>dialog.Close(),true);
+                dialog.AddAction("Don't ask for this app",()=>{result="ignore-app";dialog.Close();},true);
+                dialog.CancelButton=ignore;dialog.AcceptButton=ignore;dialog.Shown+=(s,e)=>ignore.Focus();dialog.ShowDialog(this);
             }
             return result;
         }
         private void ShowDiagnostics(){
-            using(var dialog=new Form{Text="Briefly diagnostics",ClientSize=new Size(650,470),MinimumSize=new Size(480,360),StartPosition=FormStartPosition.CenterParent,BackColor=Paper,Font=new Font("Segoe UI",10)}){
-                var box=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,BackColor=Paper,ForeColor=Ink,Text=DesktopDiagnostics.Snapshot()};dialog.Controls.Add(box);
+            using(var dialog=new DialogSurface("Diagnostics",new Size(680,560))){
+                var box=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,BackColor=Color.White,ForeColor=Ink,Font=new Font("Segoe UI",10),BorderStyle=BorderStyle.FixedSingle,Text=DesktopDiagnostics.Snapshot()};dialog.Body.Controls.Add(box);var close=dialog.AddAction("Close",()=>dialog.Close(),true);dialog.CancelButton=close;dialog.AcceptButton=close;dialog.Shown+=(s,e)=>{box.SelectionLength=0;close.Focus();};
                 using(var refresh=new System.Windows.Forms.Timer{Interval=1000}){refresh.Tick+=(s,e)=>{string value=DesktopDiagnostics.Snapshot();if(value!=box.Text)box.Text=value;};refresh.Start();dialog.ShowDialog(this);}
             }
         }
         private void ResetIgnoredApps(){
-            if(MessageBox.Show(this,"Allow Live Listen to ask about previously ignored apps again? Recording will still need your confirmation.","Reset ignored apps",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            if(BrieflyDialogs.Show(this,"Allow Live Listen to ask about previously ignored apps again? Recording will still need your confirmation.","Reset ignored apps",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
             listenPreferences.IgnoredApps.Clear();ignoredAppKeys=new HashSet<string>(StringComparer.OrdinalIgnoreCase);SaveListenPreferences();listenState.Update(false,isRecording,false);DesktopDiagnostics.Record("preferences","local","ignored-apps-reset");
         }
         private void CheckRunningMeetings()
@@ -1395,7 +1392,7 @@ namespace Briefly
                 else if(action=="confirm-stop"&&isRecording) {
                     detectorPromptOpen=true;
                     try{
-                        var answer=MessageBox.Show("The detected call controls have been absent for at least 24 seconds. Stop recording and prepare your notes? Choose No to keep recording.","Briefly recording",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2);
+                        var answer=BrieflyDialogs.Show("The detected call controls have been absent for at least 24 seconds. Stop recording and prepare your notes? Choose No to keep recording.","Briefly recording",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2);
                         if(answer==DialogResult.Yes&&isRecording)BtnRecord_Click(btnRecord,EventArgs.Empty);
                     }finally{detectorPromptOpen=false;}
                 }

@@ -53,7 +53,11 @@ namespace Briefly {
    bool callTitle=LooksLikeCall(name.ToLowerInvariant(),title);
    return new MeetingSignal{AppKey=key,Key=key,Platform=platform,Source="microphone",ObservedTitle=callTitle?title:null,Title=callTitle?title:"Microphone active in "+name};
   }
-  static bool ResolveApp(string app,out string title,out string resolved,ref bool reliable){
+  public static bool MatchesProcessLifetime(long start,long stop,DateTime processStarted,DateTime utcNow){
+   if(start<=0||stop!=0)return false;
+   try{DateTime began=DateTime.FromFileTimeUtc(start);return began>=processStarted.ToUniversalTime().AddSeconds(-2)&&began<=utcNow.ToUniversalTime().AddSeconds(5);}catch(ArgumentOutOfRangeException){return false;}
+  }
+  static bool ResolveApp(string app,long startedAt,out string title,out string resolved,ref bool reliable){
    title="";resolved=app;bool packaged=app.StartsWith("package:",StringComparison.Ordinal);
    Process[] candidates=packaged?Process.GetProcesses():Process.GetProcessesByName(Path.GetFileNameWithoutExtension(app));
    bool matched=false;
@@ -64,6 +68,7 @@ namespace Briefly {
      if(packaged){uint length=0;int status=GetPackageFamilyName(process.Handle,ref length,null);if(status!=122||length==0||length>1024)continue;var family=new StringBuilder((int)length);if(GetPackageFamilyName(process.Handle,ref length,family)!=0)continue;identity="package:"+family;}
      else identity=process.MainModule.FileName;
      if(!string.Equals(identity,app,StringComparison.OrdinalIgnoreCase))continue;
+     if(!MatchesProcessLifetime(startedAt,0,process.StartTime.ToUniversalTime(),DateTime.UtcNow))continue;
      // Use one executable identity across packaged mic records and UIA fallback.
      try{resolved=process.MainModule.FileName;}catch{if(!packaged)reliable=false;}
      matched=true;string candidate=process.MainWindowTitle;
@@ -91,7 +96,7 @@ namespace Briefly {
      object begin=key.GetValue("LastUsedTimeStart"),end=key.GetValue("LastUsedTimeStop");
      if(begin!=null&&end!=null&&Convert.ToInt64(begin)>0&&Convert.ToInt64(end)==0){
       string app=relative=="NonPackaged"?keyName.Replace('#','\\'):relative==""&&keyName!="NonPackaged"?"package:"+keyName:null;
-      if(app!=null&&(ignored==null||!ignored(app))){string title,resolved;if(ResolveApp(app,out title,out resolved,ref reliable)&&(ignored==null||!ignored(resolved))){
+      if(app!=null&&(ignored==null||!ignored(app))){string title,resolved;if(ResolveApp(app,Convert.ToInt64(begin),out title,out resolved,ref reliable)&&(ignored==null||!ignored(resolved))){
        var signal=FromMicrophoneUse(resolved,title,Convert.ToInt64(begin),Convert.ToInt64(end),true,ApplicationPath());
        // Prefer an observed call title over generic microphone activity.
        if(signal!=null&&(found==null||signal.ObservedTitle!=null))found=signal;

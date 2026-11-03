@@ -15,6 +15,11 @@ class MicrophoneActivityTest {
   Require(Signal(@"C:\Apps\Chrome\chrome.exe","",1,2)==null,"Stopped microphone history is not current activity");
   Require(Signal(@"C:\Apps\Chrome\chrome.exe","",1,0,false)==null,"Crashed/stale registry row must not be active without its process");
   Require(Signal(@"C:\Apps\Chrome\chrome.exe","First tab").Key==Signal(@"c:\apps\chrome\CHROME.exe","Other tab").Key,"Changing tab titles must not change app identity");
+  var lifetime=typeof(MeetingSignals).GetMethod("MatchesProcessLifetime");Require(lifetime!=null,"A crashed-then-reopened app can reuse a stale microphone record");
+  DateTime now=DateTime.UtcNow,launched=now.AddMinutes(-1);
+  Require(!(bool)lifetime.Invoke(null,new object[]{now.AddHours(-1).ToFileTimeUtc(),0L,launched,now}),"Mic usage predating the new process must be ignored");
+  Require((bool)lifetime.Invoke(null,new object[]{now.AddSeconds(-20).ToFileTimeUtc(),0L,launched,now}),"Mic use within the process lifetime must remain active");
+  Require(!(bool)lifetime.Invoke(null,new object[]{now.AddDays(1).ToFileTimeUtc(),0L,launched,now}),"Future corrupt timestamps must not become activity");
   Console.WriteLine("Primary mic activity: generic browser/minimized app, own-process/stale/stopped exclusion, platform evidence and stable identity pass.");return 0;
  }
 }

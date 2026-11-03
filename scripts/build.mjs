@@ -4,12 +4,12 @@ const option=name=>process.argv.find(a=>a.startsWith('--'+name+'='))?.slice(name
 if(process.platform!=='win32'||!option('dependencies')||!option('speech'))throw Error('On Windows run: node scripts/build.mjs --dependencies=PATH --speech=PATH');
 const deps=path.resolve(option('dependencies')),speech=path.resolve(option('speech')),framework=path.join(process.env.WINDIR,'Microsoft.NET/Framework64/v4.0.30319');
 await fs.mkdir(path.join(out,'speech'),{recursive:true});
-const sources=['AppAssemblyInfo.cs','AppNative.cs','ReferenceLayout.cs','MeetingActions.cs','AccentScroll.cs','ListenSwitch.cs','NativeControls.cs','CaptureSession.cs','DesktopSpeech.cs','SpeechPreferences.cs','DesktopAuth.cs','LiveListen.cs','ListenPreferences.cs','DesktopDiagnostics.cs','PendingUpload.cs'];
+const sources=['AppAssemblyInfo.cs','AppNative.cs','ReferenceLayout.cs','MeetingActions.cs','AccentScroll.cs','ListenSwitch.cs','NativeControls.cs','BrieflyDialogs.cs','CaptureSession.cs','DesktopSpeech.cs','SpeechPreferences.cs','DesktopAuth.cs','LiveListen.cs','ListenPreferences.cs','DesktopDiagnostics.cs','PendingUpload.cs'];
 const refs=['System.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll','System.Security.dll',...['UIAutomationClient.dll','UIAutomationTypes.dll','WindowsBase.dll'].map(n=>path.join(framework,'WPF',n)),...['NAudio.Core.dll','NAudio.Wasapi.dll','netstandard.dll'].map(n=>path.join(deps,n))];
 const args=['/nologo','/target:winexe','/out:'+path.join(out,'Briefly.exe'),'/win32manifest:'+path.join(root,'src/Briefly.manifest'),'/win32icon:'+path.join(root,'assets/briefly.ico'),...refs.map(r=>'/r:'+r),...sources.map(n=>path.join(root,'src',n))];
 const result=spawnSync(path.join(framework,'csc.exe'),args,{encoding:'utf8'});if(result.status!==0)throw Error(result.stdout+result.stderr);if(result.stdout)console.log(result.stdout);
 for(const n of ['NAudio.Core.dll','NAudio.Wasapi.dll'])await fs.copyFile(path.join(deps,n),path.join(out,n));
-for(const n of ['briefly.ico','briefly-1.3.5.ico'])await fs.copyFile(path.join(root,'assets/briefly.ico'),path.join(out,n));
+for(const n of ['briefly.ico','briefly-1.3.7.ico'])await fs.copyFile(path.join(root,'assets/briefly.ico'),path.join(out,n));
 await fs.copyFile(path.join(root,'assets/briefly-logo.png'),path.join(out,'briefly-logo.png'));
 for(const n of await fs.readdir(speech))if(n==='whisper-cli.exe'||n.endsWith('.dll')||n==='ggml-small.bin'||n==='ggml-tiny.bin')await fs.copyFile(path.join(speech,n),path.join(out,'speech',n));
 for(const n of ['whisper-cli.exe','ggml-small.bin','ggml-tiny.bin'])await fs.access(path.join(out,'speech',n));
